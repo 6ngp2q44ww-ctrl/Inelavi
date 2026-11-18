@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Termin-Abstimmung</title>
+<meta name="description" content="Gemeinsam per WhatsApp über Datum und Uhrzeit einer Sitzung abstimmen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: eine schmale Spalte wie ein Chatverlauf; Termine als Karten mit Ja/Vielleicht/Nein-Schalter */
+:root{
+  --bg:#EEF2EF; --surface:#FFFFFF; --sunk:#E3E9E5; --ink:#14201B; --muted:#5A6862; --line:#D3DCD7;
+  --accent:#0E6E55; --accent-ink:#FFFFFF;
+  --yes:#1F8A57; --yes-bg:#DDF1E6; --maybe:#A86E06; --maybe-bg:#FBEFD4; --no:#B4423A; --no-bg:#F7E0DD;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1613; --surface:#18221E; --sunk:#111A16; --ink:#E6EEEA; --muted:#97A6A0; --line:#2A3832;
+  --accent:#3FC59A; --accent-ink:#06261B;
+  --yes:#4CCB8A; --yes-bg:#173A29; --maybe:#E7B04A; --maybe-bg:#3A2E14; --no:#F07B70; --no-bg:#3D1F1C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1613; --surface:#18221E; --sunk:#111A16; --ink:#E6EEEA; --muted:#97A6A0; --line:#2A3832;
+  --accent:#3FC59A; --accent-ink:#06261B;
+  --yes:#4CCB8A; --yes-bg:#173A29; --maybe:#E7B04A; --maybe-bg:#3A2E14; --no:#F07B70; --no-bg:#3D1F1C; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+.wrap{max-width:620px;margin:0 auto;padding-block:28px 64px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(28px,7vw,40px);font-weight:800;letter-spacing:-.02em}
+h2{font-size:19px;font-weight:600}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lead{color:var(--muted);margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+label{font-size:13px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+input,textarea{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:64px}
+input:focus-visible,textarea:focus-visible,button:focus-visible,.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1 1 140px;min-width:0}
+.slot-edit{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:center}
+.slot-edit input{padding:9px 10px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;font-weight:600}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{background:transparent}
+button.icon{padding:8px;line-height:1;color:var(--muted)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns>button{flex:1 1 auto}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.err{color:var(--no);font-size:14px;margin:0}
+
+/* Terminkarten */
+.slots{display:flex;flex-direction:column;gap:10px}
+.slot{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.slot.best{border-color:var(--yes);box-shadow:0 0 0 1px var(--yes) inset}
+.slot.final{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.slot-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.when{font-family:var(--display);font-weight:600;font-size:18px}
+.when small{display:block;font-family:var(--body);font-weight:500;font-size:13px;color:var(--muted)}
+.badge{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--yes-bg);color:var(--yes);white-space:nowrap}
+.badge.fin{background:var(--accent);color:var(--accent-ink)}
+.tally{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;gap:12px;flex-wrap:wrap}
+.tally b{font-weight:600}
+.t-yes{color:var(--yes)} .t-maybe{color:var(--maybe)} .t-no{color:var(--no)}
+.bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--sunk)}
+.bar i{display:block}
+.bar .y{background:var(--yes)} .bar .m{background:var(--maybe)} .bar .n{background:var(--no)}
+.people{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12.5px;padding:2px 9px;border-radius:999px;font-weight:500}
+.chip.c2{background:var(--yes-bg);color:var(--yes)}
+.chip.c1{background:var(--maybe-bg);color:var(--maybe)}
+.chip.c0{background:var(--no-bg);color:var(--no);text-decoration:line-through;text-decoration-thickness:1px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg label{display:block;font-weight:600;color:inherit}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:8px 4px;border-radius:9px;border:1px solid var(--line);font-size:14px;cursor:pointer;user-select:none}
+.seg input:checked+span.s2{background:var(--yes);border-color:var(--yes);color:var(--surface)}
+.seg input:checked+span.s1{background:var(--maybe);border-color:var(--maybe);color:var(--surface)}
+.seg input:checked+span.s0{background:var(--no);border-color:var(--no);color:var(--surface)}
+.share{border-color:var(--accent)}
+.linkbox{font-size:12.5px;word-break:break-all;background:var(--sunk);border-radius:8px;padding:8px 10px;color:var(--muted);max-height:72px;overflow:auto}
+details summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:14px}
+details[open] summary{margin-bottom:10px}
+.final-banner{background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.final-banner .when small{color:inherit;opacity:.8}
+.final-banner button{background:var(--accent-ink);color:var(--accent);border-color:var(--accent-ink)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:500;z-index:20}
+footer{font-size:12.5px;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion:no-preference){.slot,.panel{transition:border-color .2s}}
+</style>
+</head>
+<body>
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ---------- Zustand <-> Link ----------
+   Der komplette Stand steckt im #-Teil des Links. Keine Server, keine Anmeldung.
+   Format: {v:1,id,t:Titel,p:Ort,d:Notiz,m:Dauer,o:[["2026-11-20","18:00"],...],r:[[Name,[2,1,0..]],...],f:Index|null}
+   Stimmen: 2 = Ja, 1 = Vielleicht, 0 = Nein */
+const b64u = {
+  enc(bytes){let s="";for(let i=0;i<bytes.length;i+=0x8000)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+    return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");},
+  dec(str){str=str.replace(/-/g,"+").replace(/_/g,"/");while(str.length%4)str+="=";
+    const b=atob(str),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+};
+const canZip = typeof CompressionStream!=="undefined" && typeof DecompressionStream!=="undefined";
+async function encode(state){
+  const bytes=new TextEncoder().encode(JSON.stringify(state));
+  if(canZip){
+    const buf=await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer();
+    return "z"+b64u.enc(new Uint8Array(buf));
+  }
+  return "j"+b64u.enc(bytes);
+}
+async function decode(code){
+  const kind=code[0], bytes=b64u.dec(code.slice(1));
+  let raw;
+  if(kind==="z"){
+    if(!canZip) throw new Error("Dein Browser ist zu alt für diesen Link. Bitte aktualisiere ihn.");
+    raw=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer());
+  } else if(kind==="j") raw=bytes;
+  else throw new Error("Unbekanntes Link-Format.");
+  const s=JSON.parse(new TextDecoder().decode(raw));
+  if(!s||!Array.isArray(s.o)||!Array.isArray(s.r)) throw new Error("Der Link ist beschädigt.");
+  return s;
+}
+const baseUrl=()=>location.href.split("#")[0];
+async function linkFor(state){return baseUrl()+"#"+await encode(state);}
+
+/* ---------- Hilfen ---------- */
+const $=(sel,root=document)=>root.querySelector(sel);
+function h(tag,attrs={},...kids){
+  const el=document.createElement(tag);
+  for(const[k,v]of Object.entries(attrs)){
+    if(v==null||v===false)continue;
+    if(k.startsWith("on"))el.addEventListener(k.slice(2),v);
+    else if(k==="class")el.className=v;
+    else el.setAttribute(k,v===true?"":v);
+  }
+  for(const kid of kids.flat()){if(kid==null||kid===false)continue;el.append(kid.nodeType?kid:String(kid));}
+  return el;
+}
+const fmtDate=d=>new Date(d+"T12:00:00").toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const fmtShort=(d,t)=>new Date(d+"T12:00:00").toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})+(t?", "+t+" Uhr":"");
+const norm=s=>s.trim().toLowerCase();
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.tm);toast.tm=setTimeout(()=>t.hidden=true,2400);}
+const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+const rid=()=>Math.random().toString(36).slice(2,8);
+
+async function copy(text){
+  try{await navigator.clipboard.writeText(text);toast("Link kopiert");}
+  catch{const ta=h("textarea",{},text);document.body.append(ta);ta.select();
+    try{document.execCommand("copy");toast("Link kopiert");}catch{toast("Bitte Link manuell kopieren");}ta.remove();}
+}
+function whatsapp(text){window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank","noopener");}
+async function nativeShare(text,url){
+  try{await navigator.share({text,url});}catch(e){if(e&&e.name!=="AbortError")copy(url);}
+}
+
+/* ---------- Auswertung ---------- */
+function tally(state){
+  return state.o.map((_,i)=>{
+    const c=[0,0,0];
+    for(const[,votes]of state.r)c[votes[i]??0]++;
+    return {yes:c[2],maybe:c[1],no:c[0],score:c[2]+c[1]*0.5};
+  });
+}
+function bestIndex(state){
+  if(!state.r.length)return -1;
+  const t=tally(state);let b=0;
+  t.forEach((x,i)=>{if(x.yes>t[b].yes||(x.yes===t[b].yes&&x.score>t[b].score))b=i;});
+  return t[b].yes+t[b].maybe>0?b:-1;
+}
+
+/* ---------- Kalenderdatei ---------- */
+function ics(state,i){
+  const[d,t]=state.o[i];const start=new Date(d+"T"+(t||"09:00")+":00");
+  const end=new Date(start.getTime()+(state.m||60)*60000);
+  const f=x=>x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
+  const esc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
+  const body=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Termin-Abstimmung//DE","BEGIN:VEVENT",
+    "UID:"+state.id+"-"+i+"@termin-abstimmung","DTSTAMP:"+f(new Date()),"DTSTART:"+f(start),"DTEND:"+f(end),
+    "SUMMARY:"+esc(state.t),state.p?"LOCATION:"+esc(state.p):null,state.d?"DESCRIPTION:"+esc(state.d):null,
+    "END:VEVENT","END:VCALENDAR"].filter(Boolean).join("\r\n");
+  const a=h("a",{href:URL.createObjectURL(new Blob([body],{type:"text/calendar"})),download:(state.t||"Sitzung").replace(/[^\wäöüÄÖÜß -]/g,"")+".ics"});
+  document.body.append(a);a.click();a.remove();
+}
+
+/* ---------- Ansicht: Umfrage erstellen ---------- */
+function viewCreate(){
+  const app=$("#app");app.replaceChildren();
+  const today=new Date();const iso=x=>x.toISOString().slice(0,10);
+  const plus=n=>{const x=new Date(today);x.setDate(x.getDate()+n);return iso(x);};
+  let slots=[[plus(7),"18:00"],[plus(8),"18:00"],[plus(9),"10:00"]];
+
+  const list=h("div",{class:"slots"});
+  function drawSlots(){
+    list.replaceChildren(...slots.map((s,i)=>h("div",{class:"slot-edit"},
+      h("input",{type:"date",id:"d"+i,value:s[0],"aria-label":"Datum "+(i+1),oninput:e=>slots[i][0]=e.target.value}),
+      h("input",{type:"time",id:"t"+i,value:s[1],"aria-label":"Uhrzeit "+(i+1),oninput:e=>slots[i][1]=e.target.value}),
+      h("button",{class:"icon",type:"button","aria-label":"Termin entfernen",title:"Entfernen",
+        onclick:()=>{if(slots.length>1){slots.splice(i,1);drawSlots();}}},"✕"))));
+  }
+  drawSlots();
+  const err=h("p",{class:"err",hidden:true});
+
+  app.append(
+    h("header",{},h("div",{class:"eyebrow"},"Termin-Abstimmung"),h("h1",{},"Wann treffen wir uns?"),
+      h("p",{class:"lead"},"Schlage mehrere Termine vor, teile den Link in deiner WhatsApp-Gruppe – alle stimmen mit Ja, Vielleicht oder Nein ab.")),
+    h("form",{class:"panel",onsubmit:async e=>{
+        e.preventDefault();
+        const t=$("#title").value.trim();
+        const o=slots.filter(s=>s[0]).map(s=>[s[0],s[1]||""]);
+        if(!t){err.textContent="Bitte gib der Sitzung einen Namen.";err.hidden=false;return;}
+        if(!o.length){err.textContent="Bitte mindestens einen Termin mit Datum angeben.";err.hidden=false;return;}
+        o.sort((a,b)=>(a[0]+a[1]).localeCompare(b[0]+b[1]));
+        const state={v:1,id:rid(),t,p:$("#place").value.trim(),d:$("#note").value.trim(),m:+$("#dur").value||60,o,r:[],f:null};
+        const url=await linkFor(state);
+        history.replaceState(null,"","#"+url.split("#")[1]);
+        viewPoll(state,{justCreated:true});
+      }},
+      h("label",{},"Sitzung",h("input",{id:"title",required:true,placeholder:"z. B. Vorstandssitzung Dezember",maxlength:"80"})),
+      h("div",{class:"row"},
+        h("label",{},"Ort (optional)",h("input",{id:"place",placeholder:"z. B. Vereinsheim oder Zoom",maxlength:"80"})),
+        h("label",{style:"flex:0 1 120px"},"Dauer (Min.)",h("input",{id:"dur",type:"number",min:"15",step:"15",value:"90"}))),
+      h("label",{},"Notiz (optional)",h("textarea",{id:"note",placeholder:"Tagesordnung, Hinweise …",maxlength:"300"})),
+      h("div",{style:"display:flex;flex-direction:column;gap:8px"},
+        h("h2",{},"Terminvorschläge"),list,
+        h("button",{type:"button",class:"ghost",onclick:()=>{const last=slots[slots.length-1]||[plus(7),"18:00"];
+          const n=new Date(last[0]+"T12:00:00");n.setDate(n.getDate()+1);slots.push([iso(n),last[1]]);drawSlots();}},"+ Weiteren Termin hinzufügen")),
+      err,
+      h("button",{class:"primary",type:"submit"},"Abstimmung erstellen")),
+    h("footer",{},"Keine Anmeldung, kein Server: Alle Daten stecken im Link.")
+  );
+}
+
+/* ---------- Ansicht: Abstimmen & Ergebnis ---------- */
+function viewPoll(state,opts={}){
+  const app=$("#app");app.replaceChildren();
+  const t=tally(state),best=bestIndex(state),n=state.r.length;
+  const myKey="ta-name-"+state.id;
+  let myName=store.get(myKey)||"";
+  const existing=()=>state.r.find(r=>norm(r[0])===norm(myName));
+  let choice=(existing()?.[1]||[]).slice();
+
+  const header=h("header",{},
+    h("div",{class:"eyebrow"},"Termin-Abstimmung · "+n+(n===1?" Stimme":" Stimmen")),
+    h("h1",{},state.t),
+    (state.p||state.d)?h("p",{class:"lead"},[state.p?"📍 "+state.p:null,state.d].filter(Boolean).join(" — ")):null);
+  app.append(header);
+
+  if(opts.justCreated) app.append(sharePanel(state,"Abstimmung erstellt. Teile den Link jetzt in deiner WhatsApp-Gruppe.","created"));
+
+  if(state.f!=null&&state.o[state.f]){
+    const[d,tm]=state.o[state.f];
+    app.append(h("section",{class:"final-banner"},
+      h("div",{class:"eyebrow",style:"color:inherit;opacity:.85"},"Termin steht fest"),
+      h("div",{class:"when"},fmtDate(d),h("small",{},tm?tm+" Uhr":"Uhrzeit offen")),
+      h("div",{class:"btns"},h("button",{type:"button",onclick:()=>ics(state,state.f)},"In Kalender eintragen (.ics)"))));
+  }
+
+  const nameInput=h("input",{id:"name",value:myName,placeholder:"Vor- und Nachname",maxlength:"40",autocomplete:"name",
+    oninput:e=>{myName=e.target.value;const ex=existing();if(ex){choice=ex[1].slice();syncSeg();}}});
+
+  const segs=[];
+  function syncSeg(){segs.forEach((g,i)=>g.querySelectorAll("input").forEach(inp=>inp.checked=String(choice[i])===inp.value));}
+
+  const cards=state.o.map(([d,tm],i)=>{
+    const x=t[i],tot=Math.max(n,1);
+    const seg=h("div",{class:"seg",role:"radiogroup","aria-label":"Deine Antwort für "+fmtShort(d,tm)},
+      [[2,"Ja","✓ Ja"],[1,"Vielleicht","? Vielleicht"],[0,"Nein","✕ Nein"]].map(([v,,txt])=>
+        h("label",{},h("input",{type:"radio",name:"s"+i,id:"s"+i+"-"+v,value:String(v),onchange:()=>choice[i]=v}),h("span",{class:"s"+v},txt))));
+    segs.push(seg);
+    const people=state.r.map(([name,votes])=>({name,v:votes[i]??0})).sort((a,b)=>b.v-a.v);
+    return h("article",{class:"slot"+(i===best&&state.f==null?" best":"")+(i===state.f?" final":"")},
+      h("div",{class:"slot-head"},
+        h("div",{class:"when"},fmtDate(d),h("small",{},tm?tm+" Uhr":"Uhrzeit offen")),
+        i===state.f?h("span",{class:"badge fin"},"Festgelegt"):(i===best&&state.f==null?h("span",{class:"badge"},"Favorit"):null)),
+      n?h("div",{class:"tally"},h("span",{class:"t-yes"},h("b",{},x.yes)," Ja"),h("span",{class:"t-maybe"},h("b",{},x.maybe)," Vielleicht"),h("span",{class:"t-no"},h("b",{},x.no)," Nein")):null,
+      n?h("div",{class:"bar","aria-hidden":"true"},
+        h("i",{class:"y",style:"width:"+x.yes/tot*100+"%"}),h("i",{class:"m",style:"width:"+x.maybe/tot*100+"%"}),h("i",{class:"n",style:"width:"+x.no/tot*100+"%"})):null,
+      people.length?h("div",{class:"people"},people.map(p=>h("span",{class:"chip c"+p.v,title:["Nein","Vielleicht","Ja"][p.v]},p.name))):null,
+      seg);
+  });
+  syncSeg();
+
+  const err=h("p",{class:"err",hidden:true});
+  app.append(
+    h("form",{class:"panel",onsubmit:async e=>{
+        e.preventDefault();
+        const name=myName.trim();
+        if(!name){err.textContent="Bitte gib deinen Namen ein, damit die anderen wissen, wer abgestimmt hat.";err.hidden=false;nameInput.focus();return;}
+        if(state.o.some((_,i)=>choice[i]==null)){err.textContent="Bitte wähle bei jedem Termin Ja, Vielleicht oder Nein.";err.hidden=false;return;}
+        const votes=state.o.map((_,i)=>choice[i]);
+        const next={...state,r:state.r.filter(r=>norm(r[0])!==norm(name)).concat([[name,votes]])};
+        store.set(myKey,name);
+        const url=await linkFor(next);
+        history.replaceState(null,"","#"+url.split("#")[1]);
+        viewPoll(next,{voted:name});
+        window.scrollTo({top:0,behavior:"smooth"});
+      }},
+      h("h2",{},existing()?"Deine Stimme ändern":"Jetzt abstimmen"),
+      h("label",{},"Dein Name",nameInput),
+      h("div",{class:"slots"},cards),
+      err,
+      h("button",{class:"primary",type:"submit"},"Stimme speichern")));
+
+  if(opts.voted){
+    const panel=sharePanel(state,"Danke, "+opts.voted+"! Deine Stimme steckt jetzt im neuen Link. Sende ihn in die Gruppe, sonst sehen die anderen sie nicht.","voted");
+    app.insertBefore(panel,header.nextSibling);
+  } else if(!opts.justCreated){
+    app.append(sharePanel(state,"Aktuellen Stand teilen","plain"));
+  }
+
+  app.append(h("details",{class:"panel"},
+    h("summary",{},"Für Organisator*innen"),
+    h("p",{class:"hint"},"Haben zwei Leute gleichzeitig abgestimmt, gibt es zwei verschiedene Links. Füge hier den anderen Link ein, um die Stimmen zusammenzuführen."),
+    (()=>{const inp=h("input",{id:"merge",placeholder:"Link einfügen …"});const e2=h("p",{class:"err",hidden:true});
+      return h("div",{style:"display:flex;flex-direction:column;gap:8px"},inp,e2,h("button",{type:"button",onclick:async()=>{
+        try{const code=inp.value.split("#")[1];if(!code)throw new Error("Das ist kein Abstimmungs-Link.");
+          const other=await decode(code);if(other.id!==state.id)throw new Error("Dieser Link gehört zu einer anderen Abstimmung.");
+          const names=new Set(state.r.map(r=>norm(r[0])));
+          const merged={...state,r:state.r.concat(other.r.filter(r=>!names.has(norm(r[0])))),f:state.f??other.f};
+          const url=await linkFor(merged);history.replaceState(null,"","#"+url.split("#")[1]);
+          viewPoll(merged,{});toast("Stimmen zusammengeführt");
+        }catch(x){e2.textContent=x.message;e2.hidden=false;}}},"Zusammenführen"));})(),
+    h("p",{class:"hint"},"Termin endgültig festlegen:"),
+    h("div",{class:"btns"},state.o.map(([d,tm],i)=>h("button",{type:"button",class:i===state.f?"primary":"",onclick:async()=>{
+      const next={...state,f:state.f===i?null:i};const url=await linkFor(next);
+      history.replaceState(null,"","#"+url.split("#")[1]);viewPoll(next,{});
+      if(next.f!=null)toast("Termin festgelegt – Link jetzt teilen");}},fmtShort(d,tm)))),
+    h("button",{type:"button",class:"ghost",onclick:()=>{history.replaceState(null,"",baseUrl());viewCreate();}},"Neue Abstimmung erstellen")));
+
+  app.append(h("footer",{},"Tipp: Immer den neuesten Link aus der Gruppe öffnen."));
+}
+
+function sharePanel(state,msg,mode){
+  const panel=h("section",{class:"panel share"},h("p",{style:"margin:0;font-weight:600"},msg),h("div",{class:"linkbox"},"Link wird erstellt …"));
+  linkFor(state).then(url=>{
+    panel.querySelector(".linkbox").textContent=url;
+    const best=bestIndex(state),n=state.r.length;
+    let text;
+    if(state.f!=null) text="📅 Termin steht fest: "+state.t+"\n"+fmtShort(...state.o[state.f])+(state.p?"\n📍 "+state.p:"")+"\n\n"+url;
+    else if(mode==="created") text="🗳️ Abstimmung: "+state.t+"\nBitte stimmt ab, wann die Sitzung stattfinden soll:\n"+url+"\n\nWichtig: Nach dem Abstimmen den neuen Link wieder hier in die Gruppe schicken.";
+    else text=(mode==="voted"?"✅ Ich habe abgestimmt – ":"🗳️ ")+state.t+"\nStand: "+n+(n===1?" Stimme":" Stimmen")+(best>=0?", Favorit "+fmtShort(...state.o[best]):"")+"\nBitte den neuesten Link benutzen:\n"+url;
+    panel.append(h("div",{class:"btns"},
+      h("button",{type:"button",class:"primary",onclick:()=>whatsapp(text)},"Per WhatsApp senden"),
+      navigator.share?h("button",{type:"button",onclick:()=>nativeShare(text,url)},"Teilen …"):null,
+      h("button",{type:"button",onclick:()=>copy(url)},"Link kopieren")));
+  });
+  return panel;
+}
+
+/* ---------- Start ---------- */
+async function route(){
+  const code=location.hash.slice(1);
+  if(!code){viewCreate();return;}
+  try{viewPoll(await decode(code));}
+  catch(e){
+    const app=$("#app");app.replaceChildren(h("section",{class:"panel"},h("h2",{},"Dieser Link funktioniert nicht"),
+      h("p",{class:"err"},e.message||"Der Link ist unvollständig. Bitte den ganzen Link aus WhatsApp kopieren."),
+      h("button",{class:"primary",onclick:()=>{history.replaceState(null,"",baseUrl());viewCreate();}},"Neue Abstimmung erstellen")));
+  }
+}
+window.addEventListener("hashchange",route);
+route();
+</script>
+</body>
+</html>
